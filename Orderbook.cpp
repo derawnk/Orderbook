@@ -26,13 +26,13 @@
 
 using namespace std;
 
-enum class OrderType 
+enum class OrderType
 {
     GoodTllCancelled,
     FillAndKill
 };
 
-enum class Side 
+enum class Side
 {
     Buy,
     Sell
@@ -50,7 +50,7 @@ struct LevelInfo
 
 using LevelInfos = std::vector<LevelInfo>;
 
-class OrderbookLevelInfos 
+class OrderbookLevelInfos
 {
     public:
     OrderbookLevelInfos(const LevelInfos& bids, const LevelInfos& asks)
@@ -67,7 +67,7 @@ class OrderbookLevelInfos
 
 };
 
-class Order 
+class Order
 {
     public:
     Order(OrderType orderType, OrderId orderId, Side side, Price price, Quantity quantity)
@@ -87,7 +87,7 @@ class Order
     Quantity GetRemainingQuantity() const {return remainingQuantity_;}
     Quantity GetFilledQuantity() const {return GetInitialQuantity() - GetRemainingQuantity();}
     bool IsFilled() const {return GetRemainingQuantity() == 0;}
-    void Fill(Quantity quantity) 
+    void Fill(Quantity quantity)
     {
 
     }
@@ -104,7 +104,7 @@ Quantity remainingQuantity_;
 using OrderPointer = shared_ptr<Order>;
 using OrderPointers = list<OrderPointer>;
 
-class OrderModify 
+class OrderModify
 {
     public:
     OrderModify(OrderId orderId, Side side, Price price, Quantity quantity)
@@ -131,14 +131,14 @@ class OrderModify
     Quantity quantity_;
 };
 
-struct TradeInfo 
+struct TradeInfo
 {
     OrderId orderId_;
     Price price_;
     Quantity quantity_;
 };
 
-class Trade 
+class Trade
 {
     public:
     Trade(const TradeInfo& bidTrade, const TradeInfo& askTrade)
@@ -165,9 +165,9 @@ class Orderbook
         OrderPointers::iterator location_;
     };
 
-    map<Price, OrderPointers, greater<Price>> bids_;
-    map<Price, OrderPointers, less<Price>> asks_;
-    unordered_map<OrderId, OrderEntry> orders_;
+    std::map<Price, OrderPointers, greater<Price>> bids_;
+    std::map<Price, OrderPointers, less<Price>> asks_;
+    std::unordered_map<OrderId, OrderEntry> orders_;
 
     bool CanMatch(Side side, Price price) const
     {
@@ -228,8 +228,67 @@ class Orderbook
                     orders_.erase(ask->GetOrderId());
                 }
 
+                if (bids.empty())
+                   bids_.erase(bidPrice);
+
+                 if (asks.empty())
+                   asks_.erase(askPrice);
+
+                trades.push_back(Trade{
+                    TradeInfo{bid->GetOrderId(), bid->GetPrice(), quantity},
+                    TradeInfo{ask->GetOrderId(), ask->GetPrice(), quantity}
+                });
             }
         }
+
+        if (!bids_.empty())
+        {
+            auto& [_, bids] = *bids_.begin();
+            auto& order = bids.front();
+            if (order->GetOrderType() == OrderType::FillAndKill)
+               CancelOrder(order->GetOrderId());
+        }
+
+          if (!asks_.empty())
+        {
+            auto& [_, asks] = *asks_.begin();
+            auto& order = asks.front();
+            if (order->GetOrderType() == OrderType::FillAndKill)
+               CancelOrder(order->GetOrderId());
+        }
+
+        return trades;
+    }
+
+    public:
+
+    Trades AddOrder(OrderPointer order)
+    {
+        if (orders_.contains(order->GetOrderId()))
+        return {};
+
+        if (order->GetOrderType() == OrderType::FillAndKill && !CanMatch(order->GetSide(), order->GetPrice()))
+        return {};
+
+        OrderPointers::iterator iterator;
+
+        if (order->GetSide() == Side::Buy)
+        {
+            auto& orders = bids_[order->GetPrice()];
+            orders.push_back(order);
+            iterator = std::next(orders.begin(), orders.size() - 1);
+
+        }
+        else
+        {
+            auto& orders = asks_[order->GetPrice()];
+            orders.push_back(order);
+            iterator = std::next(orders.begin(), orders.size() - 1);
+        }
+
+        orders_.insert({order->GetOrderId(), OrderEntry{order, iterator}});
+        return MatchOrders();
+
     }
 };
 
@@ -239,13 +298,3 @@ int main()
 return 0;
 };
 
-
-
-
-
-/* Code for error message. Needs to be reworked.
-if (quantity > GetRemainingQuantity())
-        throw logic_error(format("Order ({}) cannot be filled for than its remaining quantity.", GetOrderId() ));
-
-        remainingQuantity_ -= quantity;
-*/
