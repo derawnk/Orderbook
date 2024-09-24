@@ -1,5 +1,5 @@
 //
-// Created by Derawn Kelly on 9/4/24.
+// Created by Rawn Kelly.
 //
 
 #include <iostream>
@@ -288,6 +288,36 @@ class Orderbook
 
         orders_.insert({order->GetOrderId(), OrderEntry{order, iterator}});
         return MatchOrders();
+
+    }
+
+    void CancelOrder(OrderId orderId)
+    {
+        if (!orders_.contains(orderId))
+            return;
+
+        const auto& [order, iterator] = orders_.at(orderId);
+        orders_.erase(orderId);
+
+        if (order->GetSide() == Side::Sell)
+        {
+            auto price = order->GetPrice();
+            auto& orders = asks_.at(price);
+            orders.erase(iterator);
+            if (orders.empty())
+            {
+                asks_.erase(price);
+            } else {
+                auto price = order->GetPrice();
+                auto& orders = bids_.at(price);
+                orders.erase(iterator);
+                if (orders.empty())
+                {
+                    bids_.erase(price);
+                }
+            }
+
+        }
 
     }
 };
